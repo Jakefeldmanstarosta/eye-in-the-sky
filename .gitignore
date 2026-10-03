@@ -1,0 +1,27 @@
+# venv
+venv/
+.venv/
+
+# Python junk
+__pycache__/
+*.pyc
+
+# HF model cache (if you point it local)
+.cache/
+*.safetensors
+*.bin
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Env secrets
+.env
+
+# Collected training data
+data/
+
+# Student model checkpoints
+student/checkpoints/
