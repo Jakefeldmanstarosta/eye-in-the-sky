@@ -8,6 +8,7 @@ it bends the path left/right/up/down (smallest turn), or shows STOP if there is 
     python avoid.py --calibrate 1.0          # calibrate distances against a wall 1.0 m away
     python avoid.py --video clip.mp4         # replay a recording
     python avoid.py --record out.mp4         # also save the annotated view
+    python avoid.py --depth metric           # use the indoor metric depth model instead of relative + calibration
 
 Keys: q/Esc quit, space pause, h status text on/off.
 """
@@ -23,7 +24,7 @@ import cv2
 import numpy as np
 
 from eyeinthesky import viz
-from eyeinthesky.depth import DepthEngine, VideoSource, WebcamSource, save_calibration, wait_for_frame
+from eyeinthesky.depth import DepthEngine, VideoSource, WebcamSource, wait_for_frame
 from eyeinthesky.planner import Planner, PlannerConfig
 
 WINDOW = 'Eye in the Sky'
@@ -41,10 +42,19 @@ def parse_args():
     p.add_argument('--drone-width', type=float, default=0.3, help='drone width (m)')
     p.add_argument('--clearance', type=float, default=0.3, help='extra margin around the drone (m)')
     p.add_argument('--input-size', type=int, default=252, help='depth model input height (multiple of 14)')
+    p.add_argument('--depth', choices=['relative', 'metric'], default='relative',
+                   help='relative: general model, metres via --calibrate (default). '
+                        'metric: indoor model that outputs metres directly (calibration optional)')
     p.add_argument('--backend', choices=['openvino', 'torch'], default='openvino')
     p.add_argument('--no-display', action='store_true', help='no window (use with --record)')
     p.add_argument('--duration', type=float, help='stop after this many seconds')
     return p.parse_args()
+
+
+def smooth_fps(fps, dt):
+    """Running FPS estimate. Averages frame intervals, not 1/dt, so one tiny interval can't cause a huge spike."""
+    dt = max(dt, 1e-6)
+    return 1 / (0.9 / fps + 0.1 * dt) if fps else 1 / dt
 
 
 class Worker:
@@ -70,7 +80,7 @@ class Worker:
                 dt = now - last_t if last_t else 1 / self.source.fps
                 self.plan = self.planner.update(self.engine.estimate(frame), dt)
                 if last_t:  # FPS needs two frames
-                    self.depth_fps = 0.9 * self.depth_fps + 0.1 / dt if self.depth_fps else 1 / dt
+                    self.depth_fps = smooth_fps(self.depth_fps, dt)
                 last_t = now
         except Exception as e:
             self.error = e
@@ -87,7 +97,8 @@ def status_lines(plan, engine, view_fps, depth_fps):
              f'yaw {plan.yaw:+.0f} deg  pitch {plan.pitch:+.0f} deg',
              f'speed {plan.speed:.0%}',
              f'view {view_fps:.0f} FPS  depth {depth_fps:.0f} FPS']
-    if not engine.calibrated:
+    lines.append(f'depth model: {engine.kind}')
+    if not engine.calibrated and engine.kind == 'relative':
         lines.append('UNCALIBRATED: run --calibrate')
     return lines
 
@@ -99,20 +110,20 @@ def calibrate(args, engine, source):
     cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
     while True:
         frame = wait_for_frame(source)
-        disp = engine.disparity(frame)
-        h, w = disp.shape
-        med = float(np.median(disp[int(h * 0.4):int(h * 0.6), int(w * 0.4):int(w * 0.6)]))
-        estimate = engine.k / max(med, 1e-3)
+        raw = engine.raw(frame)
+        h, w = raw.shape
+        med = float(np.median(raw[int(h * 0.4):int(h * 0.6), int(w * 0.4):int(w * 0.6)]))
+        estimate = float(engine.to_metres(np.float32(med)))
         fh, fw = frame.shape[:2]
         view = frame.copy()
         cv2.rectangle(view, (int(fw * 0.4), int(fh * 0.4)), (int(fw * 0.6), int(fh * 0.6)), (0, 255, 255), 2)
         viz.draw_hud(view, f'target {args.calibrate:.2f} m | box reads {estimate:.2f} m | '
-                           f'{"calibrated" if engine.calibrated else "UNCALIBRATED"} | c = set, q = quit')
+                           f'{"calibrated" if engine.calibrated else "UNCALIBRATED" if engine.kind == "relative" else "model metres"}'
+                           ' | c = set, q = quit')
         cv2.imshow(WINDOW, view)
         key = cv2.waitKey(1) & 0xFF
         if key == ord('c'):
-            engine.k, engine.calibrated = args.calibrate * med, True
-            save_calibration(engine.calib_key, engine.k)
+            engine.calibrate(med, args.calibrate)
             print(f'Saved k = {engine.k:.3f} for {engine.calib_key}. The box should now read {args.calibrate} m.')
         elif key in (ord('q'), 27) or cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
             break
@@ -121,12 +132,14 @@ def calibrate(args, engine, source):
 def main():
     args = parse_args()
     source = VideoSource(args.video) if args.video else WebcamSource(args.camera)
-    engine = DepthEngine(input_size=args.input_size, aspect=source.width / source.height, backend=args.backend)
+    engine = DepthEngine(input_size=args.input_size, aspect=source.width / source.height, backend=args.backend,
+                         kind=args.depth)
     cfg = PlannerConfig(hfov=args.hfov, react_dist=args.react_dist, drone_width=args.drone_width,
                         clearance=args.clearance)
     planner = Planner(cfg)
-    print(f'Depth: {engine.backend}, model input {engine.w}x{engine.h}, '
-          f'{"calibrated" if engine.calibrated else "UNCALIBRATED (run --calibrate)"} k={engine.k:.3f}')
+    calib = 'calibrated' if engine.calibrated else (
+        'UNCALIBRATED (run --calibrate)' if engine.kind == 'relative' else 'not calibrated, using model metres')
+    print(f'Depth: {engine.kind} model on {engine.backend}, input {engine.w}x{engine.h}, {calib}, k={engine.k:.3f}')
 
     if args.calibrate:
         try:
@@ -170,7 +183,7 @@ def main():
                     new = True
                 if new:
                     now = time.time()
-                    view_fps = 0.9 * view_fps + 0.1 / (now - last_t) if view_fps else 1 / max(now - last_t, 1e-6)
+                    view_fps = smooth_fps(view_fps, now - last_t)
                     last_t = now
                     if plan is None:  # first depth frame not ready yet
                         view = np.hstack([frame, np.zeros((frame.shape[0], viz.PANEL_W, 3), np.uint8)])

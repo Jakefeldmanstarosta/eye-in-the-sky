@@ -1,4 +1,4 @@
-"""Camera/video sources and the depth engine (Depth Anything V2 relative model, converted to metres by calibration)."""
+"""Camera/video sources and the depth engine (Depth Anything V2, relative or metric model, output in metres)."""
 import json
 import os
 import sys
@@ -23,10 +23,11 @@ MODEL_CONFIGS = {
 MEAN = np.array([0.485, 0.456, 0.406], np.float32)
 STD = np.array([0.229, 0.224, 0.225], np.float32)
 
-# depth_m = k / disparity. Uncalibrated default estimated from a head ~0.35 m away on the laptop webcam at 336x252.
-# Run `python avoid.py --calibrate <metres>` to measure it for your camera.
-DEFAULT_K = 1.3
-MAX_DEPTH = 20.0
+# Relative model: depth_m = k / disparity. Uncalibrated default estimated from a head ~0.35 m away on the laptop
+# webcam at 336x252. Metric model: depth_m = k * model output, uncalibrated k = 1 (trust the model).
+# Run `python avoid.py --calibrate <metres>` to measure k for your camera.
+DEFAULT_K = {'relative': 1.3, 'metric': 1.0}
+MAX_DEPTH = 20.0  # also the indoor (Hypersim) metric model's range
 
 
 def load_calibration(key):
@@ -50,38 +51,59 @@ def save_calibration(key, k):
         json.dump(data, f, indent=2)
 
 
+def import_dpt(package_dir):
+    """Import DepthAnythingV2 from the relative (repo root) or metric (metric_depth/) package.
+
+    Both packages are called `depth_anything_v2`, so drop any previously imported copy first.
+    """
+    for name in [m for m in sys.modules if m == 'depth_anything_v2' or m.startswith('depth_anything_v2.')]:
+        del sys.modules[name]
+    sys.path.insert(0, package_dir)
+    try:
+        from depth_anything_v2.dpt import DepthAnythingV2
+    finally:
+        sys.path.remove(package_dir)
+    return DepthAnythingV2
+
+
 class DepthEngine:
     """Frame (BGR uint8) -> depth in metres at the model's input resolution.
 
-    The relative model outputs disparity (bigger = closer) with an unknown scale, so depth = k / disparity,
-    where k comes from a one-off calibration against a known distance (see avoid.py --calibrate).
+    kind='relative': the general model outputs disparity (bigger = closer) with an unknown scale, so
+        depth = k / disparity, with k from a one-off calibration against a known distance (avoid.py --calibrate).
+    kind='metric': the indoor (Hypersim) metric model outputs metres directly; calibration optionally rescales it.
     """
 
-    def __init__(self, input_size=252, aspect=4 / 3, encoder='vits', backend='openvino'):
+    def __init__(self, input_size=252, aspect=4 / 3, encoder='vits', backend='openvino', kind='relative'):
         # Fixed input size with the camera's aspect ratio; both sides must be multiples of 14
         self.h = round(input_size / 14) * 14
         self.w = round(input_size * aspect / 14) * 14
-        self.backend = backend
-        self.calib_key = f'{encoder}_{self.w}x{self.h}'
-        k = load_calibration(self.calib_key)
-        self.calibrated = k is not None
-        self.k = k if k is not None else DEFAULT_K
-
-        if REPO_DIR not in sys.path:
-            sys.path.insert(0, REPO_DIR)
-        from depth_anything_v2.dpt import DepthAnythingV2
-
-        ckpt = os.path.join(REPO_DIR, 'checkpoints', f'depth_anything_v2_{encoder}.pth')
-        self.model = DepthAnythingV2(**MODEL_CONFIGS[encoder])
-        self.model.load_state_dict(torch.load(ckpt, map_location='cpu'))
+        self.backend, self.kind = backend, kind
+        if kind == 'relative':
+            name = f'{encoder}_{self.w}x{self.h}'  # same as the notebook's, so the converted model is shared
+            DepthAnythingV2 = import_dpt(REPO_DIR)
+            self.model = DepthAnythingV2(**MODEL_CONFIGS[encoder])
+            ckpt = f'depth_anything_v2_{encoder}.pth'
+        elif kind == 'metric':
+            name = f'metric_hypersim_{encoder}_{self.w}x{self.h}'
+            DepthAnythingV2 = import_dpt(os.path.join(REPO_DIR, 'metric_depth'))
+            self.model = DepthAnythingV2(**MODEL_CONFIGS[encoder], max_depth=MAX_DEPTH)
+            ckpt = f'depth_anything_v2_metric_hypersim_{encoder}.pth'
+        else:
+            raise ValueError(f'unknown depth model kind {kind!r}')
+        self.model.load_state_dict(torch.load(os.path.join(REPO_DIR, 'checkpoints', ckpt), map_location='cpu'))
         self.model.eval()
         torch.set_num_threads(os.cpu_count())
+
+        self.calib_key = name
+        k = load_calibration(self.calib_key)
+        self.calibrated = k is not None
+        self.k = k if k is not None else DEFAULT_K[kind]
 
         self.ov_model = None
         if backend == 'openvino':
             try:
-                # Same file name as the notebook uses, so the converted model is shared
-                self.ov_model = self._load_openvino(f'da2_{encoder}_{self.w}x{self.h}.xml')
+                self.ov_model = self._load_openvino(f'da2_{name}.xml')
             except Exception as e:
                 print(f'OpenVINO unavailable ({e!r}), falling back to torch')
                 self.backend = 'torch'
@@ -107,18 +129,27 @@ class DepthEngine:
         x = (rgb.astype(np.float32) / 255.0 - MEAN) / STD
         return np.ascontiguousarray(x.transpose(2, 0, 1)[None])
 
-    def disparity(self, frame_bgr, backend=None):
+    def raw(self, frame_bgr, backend=None):
+        """Model output before calibration: disparity (relative) or metres (metric)."""
         x = self.preprocess(frame_bgr)
         if (backend or self.backend) == 'openvino' and self.ov_model is not None:
             return self.ov_model(x)[0][0]
         with torch.inference_mode():
             return self.model(torch.from_numpy(x))[0].numpy()
 
-    def to_metres(self, disparity):
-        return np.minimum(self.k / np.maximum(disparity, 1e-3), MAX_DEPTH).astype(np.float32)
+    def to_metres(self, raw, k=None):
+        k = self.k if k is None else k
+        depth = k / np.maximum(raw, 1e-3) if self.kind == 'relative' else k * raw
+        return np.minimum(depth, MAX_DEPTH).astype(np.float32)
+
+    def calibrate(self, raw_value, metres):
+        """Set and save k so that a raw model value reads as the given distance."""
+        self.k = metres * raw_value if self.kind == 'relative' else metres / max(raw_value, 1e-6)
+        self.calibrated = True
+        save_calibration(self.calib_key, self.k)
 
     def estimate(self, frame_bgr):
-        return self.to_metres(self.disparity(frame_bgr))
+        return self.to_metres(self.raw(frame_bgr))
 
 
 def open_camera(index=0, width=640, height=480):
