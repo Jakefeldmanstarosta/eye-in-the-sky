@@ -1,0 +1,5 @@
+.venv/
+Depth-Anything-V2/
+snapshots/
+.ipynb_checkpoints/
+__pycache__/
