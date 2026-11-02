@@ -20,6 +20,54 @@ curl -L -o Depth-Anything-V2/checkpoints/depth_anything_v2_metric_hypersim_vits.
   "https://huggingface.co/depth-anything/Depth-Anything-V2-Metric-Hypersim-Small/resolve/main/depth_anything_v2_metric_hypersim_vits.pth?download=true"
 ```
 
+## Running on Windows
+
+The code was written and tested on Linux. It should work on Windows with the changes below.
+
+### Code changes
+
+1. **Camera backend** (required). `cv2.CAP_V4L2` is Linux-only, so the webcam won't open on Windows. Change it to DirectShow in **both** places:
+   - `eyeinthesky/depth.py`, `open_camera()` (used by `avoid.py`)
+   - `camp_qmind.ipynb`, Cell 3, `open_camera()`
+
+   ```python
+   cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)   # was cv2.CAP_V4L2
+   ```
+
+   If DirectShow is slow to open or ignores the MJPG/resolution settings, try `cv2.CAP_MSMF`, or leave the backend out (`cv2.VideoCapture(index)`) and let OpenCV pick.
+
+2. **Qt line** (optional). `os.environ.setdefault('QT_QPA_PLATFORM', 'xcb')` in `avoid.py` and notebook Cell 1 is a Linux/Wayland workaround. The pip OpenCV build on Windows doesn't use Qt, so it's ignored, but you can delete it.
+
+### Setup commands (PowerShell)
+
+Paths use `.venv\Scripts\` instead of `.venv/bin/`. Use `curl.exe`, not `curl` (in Windows PowerShell `curl` is an alias for `Invoke-WebRequest`). PowerShell also doesn't use `\` to continue lines, so each command is on one line.
+
+```powershell
+py -m venv .venv
+.venv\Scripts\pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+.venv\Scripts\pip install opencv-python matplotlib ipykernel openvino pytest
+git clone https://github.com/DepthAnything/Depth-Anything-V2
+mkdir Depth-Anything-V2\checkpoints
+curl.exe -L -o Depth-Anything-V2\checkpoints\depth_anything_v2_vits.pth "https://huggingface.co/depth-anything/Depth-Anything-V2-Small/resolve/main/depth_anything_v2_vits.pth?download=true"
+# Only needed for avoid.py --depth metric:
+curl.exe -L -o Depth-Anything-V2\checkpoints\depth_anything_v2_metric_hypersim_vits.pth "https://huggingface.co/depth-anything/Depth-Anything-V2-Metric-Hypersim-Small/resolve/main/depth_anything_v2_metric_hypersim_vits.pth?download=true"
+# For the notebook:
+.venv\Scripts\python -m ipykernel install --user --name eye-in-the-sky --display-name "Python (eye-in-the-sky)"
+```
+
+Then run things the same way with the Windows path, e.g. `.venv\Scripts\python avoid.py --calibrate 1.0`, `.venv\Scripts\python avoid.py`, `.venv\Scripts\python -m pytest tests`.
+
+If you'd rather activate the venv (`.venv\Scripts\Activate.ps1`) and PowerShell blocks the script, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once.
+
+### Other things to check
+
+- **Camera permission:** Settings → Privacy & security → Camera → turn on *Let desktop apps access your camera*.
+- **Camera index:** `--camera 0` (or `CAMERA_INDEX` in the notebook) is the first webcam. There's no `/dev/video0`; if you have several cameras, try 1, 2, ...
+- **Washed-out image:** the notebook's `v4l2-ctl` fix is Linux-only. Turn off backlight compensation / HDR in the Windows Camera app or your webcam's own software.
+- **OpenVINO:** works on Windows. It's fastest on Intel CPUs; on AMD or if it fails, use `--backend torch` (or `BACKEND = 'torch'` in the notebook).
+- **NVIDIA GPU:** the commands above install CPU-only PyTorch, and the code runs on CPU. A CUDA build won't be used without code changes.
+- **Recording (`--record`):** uses the `mp4v` codec. If the file comes out empty, try saving as `.avi` with `cv2.VideoWriter_fourcc(*'XVID')` in `avoid.py`.
+
 ## Obstacle-avoidance MVP (`avoid.py`)
 
 The webcam stands in for the drone's forward camera. Every depth frame is turned into 3D points. The drone's default path is **straight ahead**, and it is only changed when the drone's safety tube would hit something within the reaction distance:
