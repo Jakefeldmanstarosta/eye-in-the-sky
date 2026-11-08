@@ -1,0 +1,3 @@
+[submodule "firmware/esp-drone"]
+	path = firmware/esp-drone
+	url = https://github.com/espressif/esp-drone.git
