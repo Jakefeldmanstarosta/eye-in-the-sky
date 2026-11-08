@@ -34,21 +34,26 @@ cd esp-idf && ./install.sh esp32
 
 Guide: https://docs.espressif.com/projects/esp-idf/en/release-v5.5/esp32/get-started/index.html
 
-## 3. Our hardware (classic ESP32 dev board on a breadboard)
+## 3. Wiring (ESP-Drone's standard pins for classic ESP32)
 
-| Function | ESP32 GPIO |
-|---|---|
-| Front left motor | 12 |
-| Front right motor | 13 |
-| Back left motor | 14 |
-| Back right motor | 26 |
-| MPU-6050 SCL | 21 |
-| MPU-6050 SDA | 22 |
+We use ESP-Drone's default pin map for the classic ESP32 target (`esplane with esp32 onboard`), so **no pin changes are needed in menuconfig**. Wire the breadboard to match:
+
+| Function | ESP32 GPIO | Firmware name |
+|---|---|---|
+| Front left motor (M1) | **4** | `MOTOR01_PIN` |
+| Back left motor (M2) | **33** | `MOTOR02_PIN` |
+| Back right motor (M3) | **32** | `MOTOR03_PIN` |
+| Front right motor (M4) | **25** | `MOTOR04_PIN` |
+| MPU-6050 SDA | **21** | `I2C0_PIN_SDA` |
+| MPU-6050 SCL | **22** | `I2C0_PIN_SCL` |
+| MPU-6050 INT (optional) | 19 | `MPU_PIN_INT` |
+| Buzzer +/- (optional) | 27 / 26 | `BUZ1_PIN_POS` / `BUZ2_PIN_NEG` |
+| LEDs blue / green / red (optional) | 18 / 5 / 23 | `LED_PIN_*` |
 
 Notes:
-- **I2C is swapped from the ESP32 default** (default is SDA 21, SCL 22), so SDA/SCL must be set in menuconfig.
-- **GPIO12 is a boot-strapping pin.** If it is held high at power-up, a WROOM-32 can fail to boot. If it does, move that motor to GPIO 25, 27, 32 or 33.
-- ESP-Drone's own defaults for the ESP32 target are motors on 4/33/32/25 and I2C SDA 21/SCL 22, so every pin below needs changing.
+- The M1..M4 corners follow the Crazyflie quad-X layout: M1 front left, M2 back left, M3 back right, M4 front right. M1 and M3 spin counter-clockwise, M2 and M4 clockwise. The "first run" checks below confirm this on the real drone.
+- Each motor pin drives a MOSFET/driver input, not the motor directly.
+- GPIO 4, 25, 32 and 33 are safe at boot. The old wiring (motors on 12/13/14/26 with SDA/SCL swapped on 21/22) is **not** used any more. GPIO12 is a boot-strapping pin and was risky anyway.
 
 ## 4. Configure and build
 
@@ -60,11 +65,10 @@ idf.py menuconfig
 
 In menuconfig:
 
-1. **ESP_Drone hardware version** -> `esplane with esp32 onboard (old version)` (this is the only profile for classic ESP32).
-2. Under the I2C pin settings, set `I2C0_PIN_SDA` = **22** and `I2C0_PIN_SCL` = **21**.
-3. Under **motors config**, set the motor pins (`MOTOR01_PIN` .. `MOTOR04_PIN`). Upstream does not document which of M1..M4 is which corner, so confirm with the test below before choosing. A starting point is 12 / 13 / 14 / 26 in the order of the table above.
-4. **Motor type** is brushed (715/720), i.e. PWM to a MOSFET/driver per brushed motor.
-5. Optional: turn off the buzzer (`BUZZER_ON`) if you don't have one. Its default pins on ESP32 are 27 and 26, and 26 clashes with the back right motor.
+1. **ESP_Drone hardware version** -> `esplane with esp32 onboard (old version)` (the only profile for classic ESP32, and the default).
+2. Leave the pin settings at their defaults (table above).
+3. **Motor type** is brushed (715/720), i.e. PWM to a MOSFET/driver per brushed motor.
+4. Optional: turn off the buzzer (`BUZZER_ON`) if you don't have one.
 
 Build and flash (replace the port):
 
@@ -85,6 +89,6 @@ Find the port with `ls /dev/cu.*`.
 
 ## Troubleshooting
 
-- **IMU not found:** check SDA/SCL aren't swapped in menuconfig, check wiring and power (3.3 V), keep jumper wires short.
-- **Boot loop or no boot:** unplug the motor driver from GPIO12 and retry (see strapping pin note).
+- **IMU not found:** check SDA is on GPIO21 and SCL on GPIO22 (not swapped), check wiring and power (3.3 V), keep jumper wires short.
+- **Boot loop or no boot:** disconnect the motor drivers and sensor from the board and retry, then reconnect one at a time.
 - **No Wi-Fi network:** check the serial monitor output, and make sure `TRANSPORT_NATIVE_WIFI` is selected.
