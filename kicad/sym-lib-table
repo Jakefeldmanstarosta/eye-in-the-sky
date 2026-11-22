@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "EyeInTheSky")(type "KiCad")(uri "${KIPRJMOD}/EyeInTheSky.kicad_sym")(options "")(descr "Eye in the Sky project symbols"))
+)
