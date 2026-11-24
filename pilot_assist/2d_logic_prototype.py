@@ -37,11 +37,14 @@ def fly(dt, duration, starting_position=(0,0)):
 
     # loop to simulate motion through time. start at second position since initial position is given. loop as many times as steps forward to reach total duration
     for step in range(1, steps):
-        ellapsed_time += 0.1
-        # set the current position equal to the previous position plus the difference in position in time dt (pos2 = pos1 + dpos = pos1 + vdt)
+        # add time first because initial position is already set. the loop starts at second time stamp, ie one dt already ellapsed
+        ellapsed_time += dt
+        # set the current position equal to the previous position plus the difference in position in time dt (pos2 = pos1 + dpos = pos1 + vdt).
+        # grabs v from the pilot
         position[step] = position[step-1] + pilot(ellapsed_time) * dt
 
     # returns the numpy array with the simulated flight position data 
+    print(position)
     return position
 
 def plot(position):
