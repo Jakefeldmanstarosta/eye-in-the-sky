@@ -1,5 +1,5 @@
 import numpy as np
-import matplotlib as plt
+import matplotlib.pyplot as plt
 
 # amount of time to step forward in each loop
 dt = 0.1
@@ -19,7 +19,9 @@ def fly(duration, velocity:tuple[float,float], starting_position=[0,0]):
         x_pos[step] = x_pos[step-1] + velocity[0] * dt
         y_pos[step] = y_pos[step-1] + velocity[1] * dt
 
-    print(x_pos, y_pos)
+    plt.plot(x_pos,y_pos, '-o')
+    plt.axis('equal')
+    plt.show()
 
 
 fly(10,(0,5))
