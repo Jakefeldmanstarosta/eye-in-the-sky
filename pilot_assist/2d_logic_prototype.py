@@ -15,13 +15,18 @@ def forward_then_right(time):
             x is forward, y is sideways.
     """
     if time < 5:
-        velocity = np.array([5,0])
+        velocity = np.array([1,0])
     else:
-        velocity = np.array([0,5])
+        velocity = np.array([0,1])
 
     return velocity
 
-def fly(dt, duration, pilot, starting_position=(0,0)):
+def straight(time):
+    velocity = np.array([1,0])
+    return velocity
+
+
+def fly(dt, duration, pilot, safety_filter, starting_position=(0,0)):
     """Simulate the flight of the drone using commanded velocities from a pilot.
 
     Args:
@@ -52,10 +57,10 @@ def fly(dt, duration, pilot, starting_position=(0,0)):
         elapsed_time = (dt * step) - dt  
         # set the current position equal to the previous position plus the difference in position in time dt (pos2 = pos1 + dpos = pos1 + vdt).
         # grabs v from the pilot
-        position[step] = position[step-1] + pilot(elapsed_time) * dt
-
+        position[step] = position[step-1] + safety_filter(pilot(elapsed_time), position[step-1]) * dt
 
     # returns the numpy array with the simulated flight position data 
+    print(position[steps - 1])
     return position
 
 def plot(position):
@@ -72,9 +77,37 @@ def plot(position):
     # slice position array by columns, taking the column of x positions through time and column of y positions through time, and plotting them. 
     # plot y column as x-axis (horizontal) and x column as y-axis (forward) (drone convention).
     ax.plot(position[:,1], position[:,0], '-o')
+    ax.plot(0,11, '-o')
     ax.axis('equal')
     plt.show()
 
+def safety_filter_one_dimensional(commanded_velocity, position):
+    """Filter the commanded velocity to avoid collision by slowing down
 
-position = fly(0.1, 10, forward_then_right)
+        This is a one dimensional prototype
+    
+        Args:
+            command_velocity (np.ndarray): Velocity pilot is commanding in m/s,
+            position (np.ndarray): Position at the time of command
+
+        Returns:
+                untouched_velocity (np.ndarray): Filter wasn't necessary, doesn't change anything
+                filtered_velocity (np.ndarray): Filter was used, velocity was adjusted to avoid collision
+        """
+    # calculate the distance to a point at (11,0)
+    distance_to_point = 11 - position[0]
+    # calcluate what the time until impact would be with commanded velocity
+    time_to_impact = distance_to_point / commanded_velocity[0]
+    # using 3 seconds to impact as the limit, if above, does nothing
+    if time_to_impact > 3.0:
+        return commanded_velocity
+    # if below 3 seconds, calclates what speed to send to keep the impact time at 3 seconds. this creates a gradual stop. then return it
+    else:
+        filtered_velocity = np.array([distance_to_point/3,0])
+        return filtered_velocity
+
+    
+
+    
+position = fly(1, 20, straight, safety_filter_one_dimensional)
 plot(position)
