@@ -9,7 +9,7 @@ def pilot(time):
 
     return velocity
 
-def fly(dt, duration, starting_position=(0,0)):
+def fly(dt, duration, pilot, starting_position=(0,0)):
     """Simulate the flight of the drone at constant velocity.
 
     Args:
@@ -26,8 +26,8 @@ def fly(dt, duration, starting_position=(0,0)):
     # how many steps required to complete the duration at step size dt
     steps = round((duration / dt) + 1)
 
-    # starting point for ellapsed time. will measure ellapsed time by being updated every loop iteration
-    ellapsed_time = 0
+    # starting point for elapsed time. will measure elapsed time by being updated every loop iteration
+    elapsed_time = 0
 
     # create a position vector using numpy array of size (steps) x 2. array contains a position for every step in time. every position is given as a vector (x,y)
     position = np.zeros((steps, 2))
@@ -39,10 +39,10 @@ def fly(dt, duration, starting_position=(0,0)):
     for step in range(1, steps):        
         # set the current position equal to the previous position plus the difference in position in time dt (pos2 = pos1 + dpos = pos1 + vdt).
         # grabs v from the pilot
-        position[step] = position[step-1] + pilot(ellapsed_time) * dt
+        position[step] = position[step-1] + pilot(elapsed_time) * dt
 
-        # add to ellapsed time to keep track of time of flight
-        ellapsed_time += dt
+        # add to elapsed time to keep track of time of flight
+        elapsed_time += dt
 
     # returns the numpy array with the simulated flight position data 
     return position
@@ -65,5 +65,5 @@ def plot(position):
     plt.show()
 
 
-position = fly(0.1, 10)
+position = fly(0.1, 10, pilot)
 plot(position)
