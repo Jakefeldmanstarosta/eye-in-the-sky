@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 dt = 0.1
 
 # function to plot drone flight. takes in flight duration, velocity, and a starting position. Returns the position array after the flight
-def fly(duration, velocity, starting_position=[0,0]):
+def fly(duration, velocity, starting_position=(0,0)):
     # how many ticks to get through the duration at dt
     ticks = round((duration / dt) + 1)
 
