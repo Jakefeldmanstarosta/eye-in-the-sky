@@ -12,6 +12,11 @@ def fly(duration, velocity:tuple[float,float], starting_position=[0,0]):
     x_pos = np.zeros(ticks)
     y_pos = np.zeros(ticks)
 
+    # set starting position
+    x_pos[0] = starting_position[0]
+    y_pos[0] = starting_position[1]
+
+
 # loop through as many times as ticks
     for step in range(1, ticks):
         # set the current poistion equal to the previous position plus the delta position in the time dt (dpos = vdt). start at 2nd position.
@@ -23,4 +28,4 @@ def fly(duration, velocity:tuple[float,float], starting_position=[0,0]):
     ax.axis('equal')
     plt.show()
 
-fly(10,(0,5))
+fly(10,(0,5), (-5,-5))
