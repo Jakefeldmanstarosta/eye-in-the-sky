@@ -1,14 +1,18 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-def pilot(time):
+def forward_then_right(time):
     """Scripted pilot that commands a velocity based on time.
 
+    Flies forward at 5 m/s for the first 5 seconds, then sideways
+    at 5 m/s.
+
     Args:
-        time (float): Current time in seconds
-    
+        time (float): Current time in seconds.
+
     Returns:
-        velocity (np.ndarray): Commanded velocity (vx, vy) in m/s, shape (2,). x is forward, y is sideways
+        np.ndarray: Commanded velocity (vx, vy) in m/s, shape (2,).
+            x is forward, y is sideways.
     """
     if time < 5:
         velocity = np.array([5,0])
@@ -72,5 +76,5 @@ def plot(position):
     plt.show()
 
 
-position = fly(0.1, 10, pilot)
+position = fly(0.1, 10, forward_then_right)
 plot(position)
