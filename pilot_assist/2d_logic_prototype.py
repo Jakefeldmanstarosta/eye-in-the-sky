@@ -24,7 +24,7 @@ def fly(dt, duration, velocity, starting_position=(0,0)):
     position = np.zeros((steps, 2))
 
     # set starting position at first position vector at t=0 (x0,y0) in position array
-    position[0,0], position[0,1] = starting_position[0], starting_position[1]
+    position[0] = starting_position
 
     # loop to simulate motion through time. start at second position since initial position is given. loop as many times as steps forward to reach total duration
     for step in range(1, steps):
