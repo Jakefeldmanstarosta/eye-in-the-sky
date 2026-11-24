@@ -1,14 +1,20 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-def fly(dt, duration, velocity, starting_position=(0,0)):
+def pilot(time):
+    if time < 5:
+        velocity = np.array([5,0])
+    else:
+        velocity = np.array([0,5])
+
+    return velocity
+
+def fly(dt, duration, starting_position=(0,0)):
     """Simulate the flight of the drone at constant velocity.
 
     Args:
         dt (float): Length of each time step in seconds.
         duration (float): Duration of the flight in seconds.
-        velocity (np.ndarray): Constant velocity (vx, vy) in m/s, shape (2,).
-            x is forward, y is sideways.
         starting_position (tuple[float, float]): Starting position (x, y) in
             metres. Defaults to (0, 0).
 
@@ -17,8 +23,11 @@ def fly(dt, duration, velocity, starting_position=(0,0)):
             where N is the number of steps. Each row is (x, y) in metres.
     """
 
-    # how many steps required to complete the duration at step size dtdt
+    # how many steps required to complete the duration at step size dt
     steps = round((duration / dt) + 1)
+
+    # starting point for ellapsed time. will measure ellapsed time by being updated every loop iteration
+    ellapsed_time = 0
 
     # create a position vector using numpy array of size (steps) x 2. array contains a position for every step in time. every position is given as a vector (x,y)
     position = np.zeros((steps, 2))
@@ -28,10 +37,11 @@ def fly(dt, duration, velocity, starting_position=(0,0)):
 
     # loop to simulate motion through time. start at second position since initial position is given. loop as many times as steps forward to reach total duration
     for step in range(1, steps):
+        ellapsed_time += 0.1
         # set the current position equal to the previous position plus the difference in position in time dt (pos2 = pos1 + dpos = pos1 + vdt)
-        position[step] = position[step-1] + velocity * dt
+        position[step] = position[step-1] + pilot(ellapsed_time) * dt
 
-    # returns the numpy array with teh simulated flight position data 
+    # returns the numpy array with the simulated flight position data 
     return position
 
 def plot(position):
@@ -52,5 +62,5 @@ def plot(position):
     plt.show()
 
 
-position = fly(0.1, 10, np.array([5,0]))
+position = fly(0.1, 10)
 plot(position)
