@@ -2,6 +2,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def pilot(time):
+    """Scripted pilot that commands a velocity based on time.
+
+    Args:
+        time (float): Current time in seconds
+    
+    Returns:
+        velocity (np.ndarray): Commanded velocity (vx, vy) in m/s, shape (2,). x is forward, y is sideways
+    """
     if time < 5:
         velocity = np.array([5,0])
     else:
@@ -10,11 +18,13 @@ def pilot(time):
     return velocity
 
 def fly(dt, duration, pilot, starting_position=(0,0)):
-    """Simulate the flight of the drone at constant velocity.
+    """Simulate the flight of the drone using commanded velocities from a pilot.
 
     Args:
         dt (float): Length of each time step in seconds.
         duration (float): Duration of the flight in seconds.
+        pilot (callable): Pilot that takes the current time in seconds and
+            returns a commanded velocity (vx, vy) in m/s.
         starting_position (tuple[float, float]): Starting position (x, y) in
             metres. Defaults to (0, 0).
 
