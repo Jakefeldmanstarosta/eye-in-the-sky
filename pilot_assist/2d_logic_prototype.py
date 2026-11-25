@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 OBSTACLE = np.array([5,3])
+TIME_TO_IMPACT_THRESHOLD = 3
 
 def forward_then_right(time):
     """Scripted pilot that commands a velocity based on time.
@@ -120,9 +121,9 @@ def safety_filter(commanded_velocity, position):
     # use the parallel velocity to check the time until impact in the parallel direction
     time_to_impact_parallel = distance_obstacle / speed_par
     # if the tim until impact in the parallel direction is less than 3, filter the speed, if not, do nothing
-    if time_to_impact_parallel < 3:
+    if time_to_impact_parallel < TIME_TO_IMPACT_THRESHOLD:
         # filter the parallel velocity to make sure time until impact in that direction stays at 3 seconds
-        filtered_speed_par = distance_obstacle / 3
+        filtered_speed_par = distance_obstacle / TIME_TO_IMPACT_THRESHOLD
         print(filtered_speed_par)
         # create new parallel velocity vector to account for the filtered parallel velocity. this is in the direction to the obstacle
         filtered_v_par = d_hat * filtered_speed_par
