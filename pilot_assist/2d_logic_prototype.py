@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+OBSTACLE = (11,0)
+
 def forward_then_right(time):
     """Scripted pilot that commands a velocity based on time.
 
@@ -77,7 +79,7 @@ def plot(position):
     # slice position array by columns, taking the column of x positions through time and column of y positions through time, and plotting them. 
     # plot y column as x-axis (horizontal) and x column as y-axis (forward) (drone convention).
     ax.plot(position[:,1], position[:,0], '-o')
-    ax.plot(0,11, '-o')
+    ax.plot(OBSTACLE[1],OBSTACLE[0], '-o')
     ax.axis('equal')
     plt.show()
 
@@ -95,10 +97,11 @@ def safety_filter_one_dimensional(commanded_velocity, position):
                 filtered_velocity (np.ndarray): Filter was used, velocity was adjusted to avoid collision
         """
     # calculate the distance to a point at (11,0)
-    distance_to_point = 11 - position[0]
+    distance_to_point = OBSTACLE[0] - position[0]
     # calcluate what the time until impact would be with commanded velocity
     time_to_impact = distance_to_point / commanded_velocity[0]
     # using 3 seconds to impact as the limit, if above, does nothing
+    print(time_to_impact)
     if time_to_impact > 3.0:
         return commanded_velocity
     # if below 3 seconds, calclates what speed to send to keep the impact time at 3 seconds. this creates a gradual stop. then return it
