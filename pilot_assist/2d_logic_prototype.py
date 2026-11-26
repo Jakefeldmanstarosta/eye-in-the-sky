@@ -2,28 +2,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-OBSTACLE = np.array([0.5,0.3])
+OBSTACLE = np.array([5,3])
 # the threshold for the minimum time allowed to impact in seconds.
 TIME_TO_IMPACT_THRESHOLD = 3
 
-SAFETY_BUFFER_DISTANCE = 1
+# radius around obstacle that drone avoids instead of obstacle. gives buffer in the event it gets too close
+SAFETY_BUFFER_DISTANCE = 0.1
 
 # threshold to determine if drone is "in object"
 EPSILON_DISTANCE = 1e-6
 
 def forward_then_right(time):
-    """Scripted pilot that commands a velocity based on time.
-
-    Flies forward at 5 m/s for the first 5 seconds, then sideways
-    at 5 m/s.
-
-    Args:
-        time (float): Current time in seconds.
-
-    Returns:
-        np.ndarray: Commanded velocity (vx, vy) in m/s, shape (2,).
-            x is forward, y is sideways.
-    """
     if time < 5:
         velocity = np.array([1,0])
     else:
@@ -81,13 +70,22 @@ def fly(dt, duration, pilot, safety_filter, starting_position=(0,0)):
 
 
 def safety_filter(commanded_velocity, position):
-    """Limit the commanded velocity so the drone doesn't approach the obstacle too fast.
+    """Limit the commanded velocity so the drone stays out of the safety buffer.
 
     Splits the commanded velocity into a part toward the obstacle and a part
-    perpendicular to it. If the time to impact at the current closing speed
-    is below TIME_TO_IMPACT_THRESHOLD, the part toward the obstacle is
-    reduced to keep the time at the threshold. The perpendicular part is
-    never changed. Uses the global OBSTACLE position.
+    perpendicular to it. Only the part toward the obstacle is ever changed:
+
+    - Outside the buffer: if the time to reach the buffer at the current
+      closing speed is below TIME_TO_IMPACT_THRESHOLD, the closing speed is
+      reduced so the time stays at the threshold. This gives a smooth stop
+      at the buffer edge.
+    - Inside the buffer: the closing speed is set to zero, so the drone
+      cannot get closer. Sideways and backwards motion are still allowed.
+
+    Commands moving sideways or away from the obstacle pass through
+    unchanged. If the drone is within EPSILON_DISTANCE of the obstacle, the
+    command is passed through, since the direction to it is undefined.
+    Uses the global OBSTACLE position.
 
     Args:
         commanded_velocity (np.ndarray): Velocity (vx, vy) commanded by the
@@ -112,7 +110,6 @@ def safety_filter(commanded_velocity, position):
     speed_par = np.dot(commanded_velocity, d_hat)
     # calculate the parallel component of the velocity vector  
     v_par = d_hat * speed_par
-    print(v_par)
     # use previous result to find perpendicular component of the velocity vector
     v_perp = commanded_velocity - v_par
     # check if the velocity has component towards the obstacle. if not, do nothing and end the function
