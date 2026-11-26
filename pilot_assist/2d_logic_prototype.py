@@ -2,11 +2,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-OBSTACLE = np.array([5,3])
+OBSTACLE = np.array([0.5,0.3])
 # the threshold for the minimum time allowed to impact in seconds.
 TIME_TO_IMPACT_THRESHOLD = 3
 
-SAFETY_BUFFER_DISTANCE = 0.0
+SAFETY_BUFFER_DISTANCE = 1
 
 # threshold to determine if drone is "in object"
 EPSILON_DISTANCE = 1e-6
@@ -101,29 +101,41 @@ def safety_filter(commanded_velocity, position):
     """
     # find the displacement vector from the drone to the obstacle
     d_obstacle = OBSTACLE - position
-    # take the norm of that displacement vector to find the distance. subtract the safety buffer to create a radius around the obstacle that the calculations are based off instead of the actual obstacle
-    distance_obstacle = np.linalg.norm(d_obstacle) - SAFETY_BUFFER_DISTANCE
+    # take the norm of that displacement vector to find the distance
+    distance_obstacle = np.linalg.norm(d_obstacle)
+    # in the event that the drone is in the same position as the obstacle (within epsilon of it), let the pilot control the drone to get out of the situation
+    if distance_obstacle < EPSILON_DISTANCE:
+        return commanded_velocity
     # normalize the displacement vector using the norm just calculated to get the unit vector pointing in the direction of the obstacle
     d_hat = d_obstacle / distance_obstacle
     # find the magnitude of velocity parallel to the direction of the obstacle
     speed_par = np.dot(commanded_velocity, d_hat)
     # calculate the parallel component of the velocity vector  
     v_par = d_hat * speed_par
+    print(v_par)
     # use previous result to find perpendicular component of the velocity vector
     v_perp = commanded_velocity - v_par
-    # in the event that the drone is in the same position as the obstacle (within epsilon of it), let the pilot control the drone to get out of the situation
-    if distance_obstacle < EPSILON_DISTANCE:
-        print('im stuck help!')
-        return commanded_velocity
     # check if the velocity has component towards the obstacle. if not, do nothing and end the function
     if speed_par <= 0:
         return commanded_velocity
+    # use distance to a set buffer instead of the object directly, so the drone slows down for a radius around the obstacle giving it a buffer to avoid collisions in the event it doesn't stop before th obstacle
+    distance_buffer = distance_obstacle - SAFETY_BUFFER_DISTANCE
+    # check if the drone is inside the buffer. if so, cut off paralell velocity to the obstacle entirely, until the drone is out
+    if distance_buffer <= 0:
+        # filter the parallel velocity to be 0, only sideways or backwards motion allowed relative to the obstacle
+        filtered_speed_par = 0
+        # create new parallel velocity vector to account for the 0 parallel velocity. this is in the direction to the obstacle
+        filtered_v_par = d_hat * filtered_speed_par
+        # create final new velocity command by adding back the perpindicular component to the filtered parallel component and return it
+        filtered_commanded_velocity = filtered_v_par + v_perp
+        return filtered_commanded_velocity
+
     # use the parallel velocity to check the time until impact in the parallel direction
-    time_to_impact_parallel = distance_obstacle / speed_par
+    time_to_impact_parallel = distance_buffer / speed_par
     # if the tim until impact in the parallel direction is less than 3, filter the speed, if not, do nothing
     if time_to_impact_parallel < TIME_TO_IMPACT_THRESHOLD:
         # filter the parallel velocity to make sure time until impact in that direction stays at 3 seconds
-        filtered_speed_par = distance_obstacle / TIME_TO_IMPACT_THRESHOLD
+        filtered_speed_par = distance_buffer / TIME_TO_IMPACT_THRESHOLD
         # create new parallel velocity vector to account for the filtered parallel velocity. this is in the direction to the obstacle
         filtered_v_par = d_hat * filtered_speed_par
         # create final new velocity command by adding back the perpindicular component to the filtered parallel component and return it
