@@ -67,7 +67,6 @@ def fly(dt, duration, pilot, safety_filter, starting_position=(0,0)):
         position[step] = position[step-1] + safety_filter(pilot(elapsed_time), position[step-1]) * dt
 
     # returns the numpy array with the simulated flight position data 
-    print(position[steps - 1])
     return position
 
 def plot(position):
@@ -89,18 +88,24 @@ def plot(position):
     plt.show()
 
 def safety_filter(commanded_velocity, position):
-    """Filter the commanded velocity to avoid collision by slowing down
+    """Limit the commanded velocity so the drone doesn't approach the obstacle too fast.
 
-        This is a one dimensional prototype
-    
-        Args:
-            command_velocity (np.ndarray): Velocity pilot is commanding in m/s,
-            position (np.ndarray): Position at the time of command
+    Splits the commanded velocity into a part toward the obstacle and a part
+    perpendicular to it. If the time to impact at the current closing speed
+    is below TIME_TO_IMPACT_THRESHOLD, the part toward the obstacle is
+    reduced to keep the time at the threshold. The perpendicular part is
+    never changed. Uses the global OBSTACLE position.
 
-        Returns:
-                untouched_velocity (np.ndarray): Filter wasn't necessary, doesn't change anything
-                filtered_velocity (np.ndarray): Filter was used, velocity was adjusted to avoid collision
-        """
+    Args:
+        commanded_velocity (np.ndarray): Velocity (vx, vy) commanded by the
+            pilot in m/s, shape (2,).
+        position (np.ndarray): Current drone position (x, y) in metres,
+            shape (2,).
+
+    Returns:
+        np.ndarray: Safe velocity (vx, vy) in m/s, shape (2,). Equal to the
+            commanded velocity if no adjustment was needed.
+    """
     # find the displacement vector from the drone to the obstacle
     d_obstacle = OBSTACLE - position
     # take the norm of that displacement vector to find the distance
@@ -114,7 +119,6 @@ def safety_filter(commanded_velocity, position):
     # use previous result to find perpendicular component of the velocity vector
     v_perp = commanded_velocity - v_par
     # check if the velocity has component towards the obstacle. if not, do nothing and end the function
-    print(d_obstacle, distance_obstacle, d_hat, speed_par, v_par, v_perp)
     if speed_par <= 0:
         return commanded_velocity
 
@@ -124,7 +128,6 @@ def safety_filter(commanded_velocity, position):
     if time_to_impact_parallel < TIME_TO_IMPACT_THRESHOLD:
         # filter the parallel velocity to make sure time until impact in that direction stays at 3 seconds
         filtered_speed_par = distance_obstacle / TIME_TO_IMPACT_THRESHOLD
-        print(filtered_speed_par)
         # create new parallel velocity vector to account for the filtered parallel velocity. this is in the direction to the obstacle
         filtered_v_par = d_hat * filtered_speed_par
         # create final new velocity command by adding back the perpindicular component to the filtered parallel component and return it
