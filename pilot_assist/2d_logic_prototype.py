@@ -3,8 +3,13 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
 OBSTACLE = np.array([5,3])
+# the threshold for the minimum time allowed to impact in seconds.
 TIME_TO_IMPACT_THRESHOLD = 3
-SAFETY_BUFFER_DISTANCE = 0.1
+
+SAFETY_BUFFER_DISTANCE = 0.0
+
+# threshold to determine if drone is "in object"
+EPSILON_DISTANCE = 1e-6
 
 def forward_then_right(time):
     """Scripted pilot that commands a velocity based on time.
@@ -106,6 +111,10 @@ def safety_filter(commanded_velocity, position):
     v_par = d_hat * speed_par
     # use previous result to find perpendicular component of the velocity vector
     v_perp = commanded_velocity - v_par
+    # in the event that the drone is in the same position as the obstacle (within epsilon of it), let the pilot control the drone to get out of the situation
+    if distance_obstacle < EPSILON_DISTANCE:
+        print('im stuck help!')
+        return commanded_velocity
     # check if the velocity has component towards the obstacle. if not, do nothing and end the function
     if speed_par <= 0:
         return commanded_velocity
@@ -122,6 +131,7 @@ def safety_filter(commanded_velocity, position):
         return filtered_commanded_velocity
     else:
         return commanded_velocity
+
 
 
 def plot(position):
