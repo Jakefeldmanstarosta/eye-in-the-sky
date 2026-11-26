@@ -41,6 +41,8 @@ def fly(dt, duration, pilot, safety_filter, starting_position=(0,0)):
         duration (float): Duration of the flight in seconds.
         pilot (callable): Pilot that takes the current time in seconds and
             returns a commanded velocity (vx, vy) in m/s.
+        safety_filter (callable): Filter that takes a commanded velocity and
+            the current position, and returns a safe velocity in m/s.
         starting_position (tuple[float, float]): Starting position (x, y) in
             metres. Defaults to (0, 0).
 
