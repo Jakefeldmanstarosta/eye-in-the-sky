@@ -1,8 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 
 OBSTACLE = np.array([5,3])
 TIME_TO_IMPACT_THRESHOLD = 3
+SAFETY_BUFFER_DISTANCE = 0.1
 
 def forward_then_right(time):
     """Scripted pilot that commands a velocity based on time.
@@ -71,23 +73,7 @@ def fly(dt, duration, pilot, safety_filter, starting_position=(0,0)):
     # returns the numpy array with the simulated flight position data 
     return position
 
-def plot(position):
-    """Plot the drone's flight path from above.
 
-    Forward (x) is drawn up the screen and sideways (y) across it.
-
-    Args:
-        position (np.ndarray): Positions of the drone at each time step,
-            shape (N, 2). Each row is (x, y) in metres.
-    """
-
-    fig, ax = plt.subplots()
-    # slice position array by columns, taking the column of x positions through time and column of y positions through time, and plotting them. 
-    # plot y column as x-axis (horizontal) and x column as y-axis (forward) (drone convention).
-    ax.plot(position[:,1], position[:,0], '-o')
-    ax.plot(OBSTACLE[1],OBSTACLE[0], '-o')
-    ax.axis('equal')
-    plt.show()
 
 def safety_filter(commanded_velocity, position):
     """Limit the commanded velocity so the drone doesn't approach the obstacle too fast.
@@ -110,8 +96,8 @@ def safety_filter(commanded_velocity, position):
     """
     # find the displacement vector from the drone to the obstacle
     d_obstacle = OBSTACLE - position
-    # take the norm of that displacement vector to find the distance
-    distance_obstacle = np.linalg.norm(d_obstacle)
+    # take the norm of that displacement vector to find the distance. subtract the safety buffer to create a radius around the obstacle that the calculations are based off instead of the actual obstacle
+    distance_obstacle = np.linalg.norm(d_obstacle) - SAFETY_BUFFER_DISTANCE
     # normalize the displacement vector using the norm just calculated to get the unit vector pointing in the direction of the obstacle
     d_hat = d_obstacle / distance_obstacle
     # find the magnitude of velocity parallel to the direction of the obstacle
@@ -123,7 +109,6 @@ def safety_filter(commanded_velocity, position):
     # check if the velocity has component towards the obstacle. if not, do nothing and end the function
     if speed_par <= 0:
         return commanded_velocity
-
     # use the parallel velocity to check the time until impact in the parallel direction
     time_to_impact_parallel = distance_obstacle / speed_par
     # if the tim until impact in the parallel direction is less than 3, filter the speed, if not, do nothing
@@ -138,8 +123,24 @@ def safety_filter(commanded_velocity, position):
     else:
         return commanded_velocity
 
-def nothing_safety(commanded_velocity, position):
-    return commanded_velocity
+
+def plot(position):
+    """Plot the drone's flight path from above.
+
+    Forward (x) is drawn up the screen and sideways (y) across it.
+
+    Args:
+        position (np.ndarray): Positions of the drone at each time step,
+            shape (N, 2). Each row is (x, y) in metres.
+    """
+
+    fig, ax = plt.subplots()
+    # slice position array by columns, taking the column of x positions through time and column of y positions through time, and plotting them. 
+    # plot y column as x-axis (horizontal) and x column as y-axis (forward) (drone convention).
+    ax.plot(position[:,1], position[:,0], '-o')
+    ax.plot(OBSTACLE[1],OBSTACLE[0], '-o')
+    ax.axis('equal')
+    plt.show()
 
 position = fly(0.5, 5, diagonal, safety_filter)
 plot(position)
